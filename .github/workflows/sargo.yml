@@ -1,0 +1,22 @@
+name: Release Google Factory Image
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # 必须开启写入权限
+    steps:
+      - name: Download
+        run: |
+          curl -L -o sargo-factory.zip "https://dl.google.com/dl/android/aosp/sargo-sp2a.220505.008-factory-071e368a.zip"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0
+          files: sargo-factory.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
