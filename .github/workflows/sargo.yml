@@ -1,22 +1,65 @@
 name: Release Google Factory Image
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # 手动触发
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # 必须开启写入权限
+      contents: write # 必须开启，否则无法上传到 Release
+    
     steps:
-      - name: Download
+      - name: Download Factory Image
         run: |
+          echo "开始下载工厂镜像..."
           curl -L -o sargo-factory.zip "https://dl.google.com/dl/android/aosp/sargo-sp2a.220505.008-factory-071e368a.zip"
 
-      - name: Create Release
+      - name: Extract boot.img
+        run: |
+          set -e  # 遇到任何错误立即停止执行
+          
+          mkdir -p output
+          
+          echo "正在解压第一层压缩包..."
+          unzip sargo-factory.zip -d temp_extract
+          
+          # 定位内层镜像压缩包 (image-*.zip)
+          # Google 的包结构通常是：temp_extract/sargo-xxx/image-sargo-xxx.zip
+          INNER_ZIP=$(find temp_extract -name "image-*.zip")
+          
+          if [ -z "$INNER_ZIP" ]; then
+            echo "::error::未能在工厂镜像中找到内层的 image-*.zip 压缩包"
+            exit 1
+          fi
+          
+          echo "正在从 $INNER_ZIP 提取 boot.img..."
+          # -j 参数忽略压缩包内的路径层级，直接解压到 output 目录
+          unzip -j "$INNER_ZIP" "boot.img" -d output
+          
+          # 最终确认文件是否存在
+          if [ ! -f "output/boot.img" ]; then
+            echo "::error::提取结束，但 output 目录下未发现 boot.img"
+            exit 1
+          fi
+          
+          echo "成功提取 boot.img"
+
+      - name: Cleanup Temporary Files
+        # 这一步仅在前两步成功时运行。如果解压失败，Workflow 会直接停在上面。
+        run: |
+          echo "正在清理临时文件以释放磁盘空间..."
+          rm -f sargo-factory.zip
+          rm -rf temp_extract
+          echo "清理完成。"
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.0
-          files: sargo-factory.zip
+          name: "Pixel 3a (sargo) Boot Image SP2A.220505.008"
+          draft: false
+          prerelease: false
+          files: output/boot.img # 只上传提取出来的 boot.img
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
